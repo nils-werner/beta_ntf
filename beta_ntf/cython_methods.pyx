@@ -5,9 +5,12 @@ import numpy as np
 cimport numpy as np
 from utils import parafac
 
+DTYPE = np.float64
+ctypedef np.float64_t DTYPE_t
+
 
 @cython.binding(True)
-def fit(self, X, W=np.array([1])):
+def fit(self, np.ndarray X, np.ndarray W=np.array([1])):
     """Learns NTF model
 
     Parameters
