@@ -16,6 +16,8 @@ along with this program. If not, see <http://www.gnu.org/licenses/>."""
 import string
 import time
 import numpy as np
+import cython_methods
+from utils import parafac, nnrandn
 
 
 def _betadiv(a, b, beta):
@@ -77,7 +79,7 @@ class BetaNTF:
         self.eps = eps
         self.factors_= [nnrandn((dim, self.n_components)) for dim in data_shape]
 
-    def fit(self, X, W=np.array([1])):
+    def pythonfit(self, X, W=np.array([1])):
         """Learns NTF model
 
         Parameters
@@ -138,6 +140,11 @@ class BetaNTF:
         print 'Done.'
         return self
 
+    try:
+        fit = cython_methods.fit
+    except ImportError:
+        fit = pythonfit
+
     def score(self, X):
         """Computes the total beta-divergence between the current model and X
 
@@ -180,81 +187,3 @@ class BetaNTF:
         request = request[:-1] + '->' + string.lowercase[:ndims] + 'z'
         model = np.einsum(request, *(self.factors_))
         return model.__getitem__(key)
-
-
-def parafac(factors):
-    """Computes the parafac model of a list of matrices
-
-    if factors=[A,B,C,D..Z] with A,B,C..Z of shapes a*k, b*k...z*k, returns
-    the a*b*..z ndarray P such that
-    p(ia,ib,ic,...iz)=\sum_k A(ia,k)B(ib,k)C(ic,k)...Z(iz,k)
-
-    Parameters
-    ----------
-    factors : list of arrays
-        The factors
-
-    Returns
-    -------
-    out : array
-        The parafac model
-    """
-    ndims = len(factors)
-    request = ''
-    for temp_dim in range(ndims):
-        request += string.lowercase[temp_dim] + 'z,'
-    request = request[:-1] + '->' + string.lowercase[:ndims]
-    return np.einsum(request, *factors)
-
-
-def nnrandn(shape):
-    """generates randomly a nonnegative ndarray of given shape
-
-    Parameters
-    ----------
-    shape : tuple
-        The shape
-
-    Returns
-    -------
-    out : array of given shape
-        The non-negative random numbers
-    """
-    return np.abs(np.random.randn(*shape))
-
-
-if __name__ == '__main__':
-    # Choosing the shape of the data to approximate (tuple of length up to 25)
-    # data_shape = (1000, 400, 10)  # 3-way tensor
-    data_shape = (1000, 400)  # matrix
-    data_shape = (50, 5, 10, 6, 7)  # 5-way tensor
-    #data_shape = (1000, 400)  # matrix
-
-    # Choosing the number of components for testing
-    n_components = 9
-
-    # Building the true factors to generate data
-    factors = [nnrandn((shape, n_components)) for shape in data_shape]
-
-    # Generating the data through the parafac function
-    V = parafac(factors)
-
-    # Create BetaNTF object
-    beta_ntf = BetaNTF(V.shape, n_components=10, beta=1, n_iter=100,
-                       verbose=True)
-
-    # Fit the model
-    beta_ntf.fit(V)
-
-    #Print resulting score
-    print 'Resulting score', beta_ntf.score(V)
-    print 'Compression ratio : %0.1f%%'%((1.-sum(beta_ntf.data_shape)*
-                        beta_ntf.n_components
-                        /float(prod(beta_ntf.data_shape)))*100.)
-        
-
-    #Now illustrate the get model
-    total_model= parafac(beta_ntf.factors_)
-    two_components = beta_ntf[...,:2]
-    print 'Shape of total_model : ',total_model.shape
-    print 'Shape of two_components : ',two_components.shape
